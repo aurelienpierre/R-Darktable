@@ -78,6 +78,7 @@ typedef enum dt_iop_demosaic_method_t
   DT_IOP_DEMOSAIC_AMAZE_VNG = DEMOSAIC_DUAL | DT_IOP_DEMOSAIC_AMAZE, // $DESCRIPTION: "AMaZE + VNG4"
   DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME = 3, // $DESCRIPTION: "passthrough (monochrome)"
   DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR = 4, // $DESCRIPTION: "photosite color (debug)"
+  DT_IOP_DEMOSAIC_BILINEAR = 7, // $DESCRIPTION: "bilinear"
   // methods for x-trans images
   DT_IOP_DEMOSAIC_VNG = DEMOSAIC_XTRANS | 0,           // $DESCRIPTION: "VNG"
   DT_IOP_DEMOSAIC_MARKESTEIJN = DEMOSAIC_XTRANS | 1,   // $DESCRIPTION: "Markesteijn 1-pass"
@@ -396,6 +397,9 @@ static const char* method2string(dt_iop_demosaic_method_t method)
     case DT_IOP_DEMOSAIC_PASSTHR_COLORX:
       string = "photosites (XTrans)";
       break;
+    case DT_IOP_DEMOSAIC_BILINEAR:
+      string = "bilinear";
+      break;
     default:
       string = "(unknown method)";
   }
@@ -585,6 +589,19 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       else if((demosaicing_method & ~DEMOSAIC_DUAL) == DT_IOP_DEMOSAIC_RCD)
       {
         rcd_demosaic(piece, tmp, in, &roo, &roi, piece->pipe->dsc.filters);
+      }
+      else if(demosaicing_method == DT_IOP_DEMOSAIC_BILINEAR)
+      {
+        // separate out G1 and G2 in RGGB Bayer patterns
+        uint32_t filters4 = 0;
+        if(piece->pipe->dsc.filters == 9 || FILTERS_ARE_4BAYER(piece->pipe->dsc.filters)) // x-trans or CYGM/RGBE
+          filters4 = piece->pipe->dsc.filters;
+        else if((piece->pipe->dsc.filters & 3) == 1)
+          filters4 = piece->pipe->dsc.filters | 0x03030303u;
+        else
+          filters4 = piece->pipe->dsc.filters | 0x0c0c0c0cu;
+
+        lin_interpolate(tmp, in, &roo, &roi, filters4, xtrans);
       }
       else if(demosaicing_method == DT_IOP_DEMOSAIC_LMMSE)
       {
@@ -1586,11 +1603,11 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
 
   g->demosaic_method_bayer = dt_bauhaus_combobox_from_params(self, "demosaicing_method");
-  for(int i=0;i<7;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_bayer, 9);
+  for(int i=0;i<7;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_bayer, 10);
   gtk_widget_set_tooltip_text(g->demosaic_method_bayer, _("Bayer sensor demosaicing method, PPG and RCD are fast, AMaZE and LMMSE are slow.\nLMMSE is suited best for high ISO images.\ndual demosaicers double processing time."));
 
   g->demosaic_method_xtrans = dt_bauhaus_combobox_from_params(self, "demosaicing_method");
-  for(int i=0;i<9;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_xtrans, 0);
+  for(int i=0;i<10;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_xtrans, 0);
   gtk_widget_set_tooltip_text(g->demosaic_method_xtrans, _("X-Trans sensor demosaicing method, Markesteijn 3-pass and frequency domain chroma are slow.\ndual demosaicers double processing time."));
 
   g->median_thrs = dt_bauhaus_slider_from_params(self, "median_thrs");
