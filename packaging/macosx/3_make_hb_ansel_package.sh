@@ -16,7 +16,7 @@ scriptDir=$(dirname "$0")
 cd "$scriptDir"/
 
 # Define base variables
-buildDir="../../build/macosx"
+buildDir="../../install"
 dtPackageDir="$buildDir"/package
 dtAppName="Ansel"
 dtWorkingDir="$dtPackageDir"/"$dtAppName".app
@@ -213,7 +213,7 @@ for dtExecutable in $dtExecutables; do
 done
 
 # Add homebrew shared objects
-dtSharedObjDirs="gtk-3.0 gdk-pixbuf-2.0 gio ImageMagick"
+dtSharedObjDirs="gtk-3.0 gdk-pixbuf-2.0 gio GraphicsMagick"
 for dtSharedObj in $dtSharedObjDirs; do
     cp -LR "$homebrewHome"/lib/"$dtSharedObj" "$dtResourcesDir"/lib/
 done
@@ -229,10 +229,6 @@ dtShares="lensfun icons iso-codes mime"
 for dtShare in $dtShares; do
     install_share "$dtShare"
 done
-
-# Update icon caches
-gtk3-update-icon-cache -f "$dtResourcesDir"/share/icons/Adwaita
-gtk3-update-icon-cache -f "$dtResourcesDir"/share/icons/hicolor
 
 # Try updating lensfun
 lensfun-update-data || true
@@ -264,9 +260,6 @@ loadersCacheFile="$dtResourcesDir"/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
 sed -i -e "s#$homebrewHome/lib/gdk-pixbuf-2.0/2.10.0/loaders#@executable_path/../Resources/lib/gdk-pixbuf-2.0/2.10.0/loaders#g" "$loadersCacheFile"
 # Move it to the right place
 mv "$loadersCacheFile" "$dtResourcesDir"/etc/gtk-3.0/
-
-# ImageMagick config files
-cp -R $homebrewHome/Cellar/imagemagick/*/etc $dtResourcesDir
 
 # Install homebrew dependencies of lib subdirectories
 dtLibFiles=$(find -E "$dtResourcesDir"/lib/*/* -regex '.*\.(so|dylib)')
@@ -306,18 +299,18 @@ if [ -d "$buildDir"/Icons.iconset ]; then
 fi
 mkdir "$buildDir"/Icons.iconset
 rsvg-convert -h 644 ../../data/pixmaps/scalable/ansel.svg > "$buildDir/Icons.iconset/icon_512x512.png"
-magick mogrify -crop 512x512+66+66 "$buildDir/Icons.iconset/icon_512x512.png"
+gm mogrify -crop 512x512+66+66 "$buildDir/Icons.iconset/icon_512x512.png"
 cp  "$buildDir/Icons.iconset/icon_512x512.png" "$buildDir/Icons.iconset/icon_256x256@2.png"
 rsvg-convert -h 322 ../../data/pixmaps/scalable/ansel.svg > "$buildDir/Icons.iconset/icon_256x256.png"
-magick mogrify -crop 256x256+33+33 "$buildDir/Icons.iconset/icon_256x256.png"
+gm mogrify -crop 256x256+33+33 "$buildDir/Icons.iconset/icon_256x256.png"
 cp  "$buildDir/Icons.iconset/icon_256x256.png" "$buildDir/Icons.iconset/icon_128x128@2.png"
 rsvg-convert -h 162 ../../data/pixmaps/scalable/ansel.svg > "$buildDir/Icons.iconset/icon_128x128.png"
-magick mogrify -crop 128x128+17+17 "$buildDir/Icons.iconset/icon_128x128.png"
+gm mogrify -crop 128x128+17+17 "$buildDir/Icons.iconset/icon_128x128.png"
 rsvg-convert -h 40 ../../data/pixmaps/scalable/ansel.svg > "$buildDir/Icons.iconset/icon_32x32.png"
-magick mogrify -crop 32x32+4+4 "$buildDir/Icons.iconset/icon_32x32.png"
+gm mogrify -crop 32x32+4+4 "$buildDir/Icons.iconset/icon_32x32.png"
 cp  "$buildDir/Icons.iconset/icon_32x32.png" "$buildDir/Icons.iconset/icon_16x168@2.png"
 rsvg-convert -h 20 ../../data/pixmaps/scalable/ansel.svg > "$buildDir/Icons.iconset/icon_16x16.png"
-magick mogrify -crop 16x16+2+2 "$buildDir/Icons.iconset/icon_16x16.png"
+gm mogrify -crop 16x16+2+2 "$buildDir/Icons.iconset/icon_16x16.png"
 if [ -f "$buildDir/Icons.icns" ]; then
     rm "$buildDir/Icons.icns"
 fi
