@@ -33,7 +33,7 @@ cd "$buildDir"
 
 # Configure build
 cmake .. \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3.1 \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET=13.5 \
     -DCMAKE_CXX_FLAGS=-stdlib=libc++ \
     -DCMAKE_OBJCXX_FLAGS=-stdlib=libc++ \
     -DBINARY_PACKAGE_BUILD=ON \
