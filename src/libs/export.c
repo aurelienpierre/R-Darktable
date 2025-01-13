@@ -262,18 +262,69 @@ static void _scale_optim()
   free(scale_str);
 }
 
+/**
+ * @brief get style from config
+ * 
+ * @return gchar* 
+ */
+gchar *_conf_get_style()
+{
+  gchar *style = NULL;
+  const gchar *tmp_style = dt_conf_get_string_const(CONFIG_PREFIX "style");
+  if(tmp_style)
+  {
+    style = g_strdup(tmp_style);
+  }
+
+  return style;
+}
+
+
+gint _export_confirm_message()
+{
+  gint res = -1;
+  char *confirm_message = NULL;
+  dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage();
+  if(mstorage->ask_user_confirmation)
+    confirm_message = mstorage->ask_user_confirmation(mstorage);
+
+  if(confirm_message)
+  {
+    const GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *dialog = gtk_message_dialog_new(
+        GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
+        "%s", confirm_message);
+
+#ifdef GDK_WINDOWING_QUARTZ
+    dt_osx_disallow_fullscreen(dialog);
+#endif
+
+    gtk_window_set_title(GTK_WINDOW(dialog), _("export to disk"));
+    res = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    g_free(confirm_message);
+    confirm_message = NULL;
+  }
+
+  return res;
+}
+
 static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
 {
-  /* write current history changes so nothing gets lost,
-     do that only in the darkroom as there is nothing to be saved
-     when in the lighttable (and it would write over current history stack) */
+  if(_export_confirm_message() == GTK_RESPONSE_NO)
+    return;
+
+  /**
+  * do that only in the darkroom as there is nothing to be saved
+  * when in the lighttable (and it would write over current history stack) 
+  */
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
   if(cv->view(cv) == DT_VIEW_DARKROOM) dt_dev_write_history(darktable.develop);
 
-  char style[128] = { 0 };
-
-  // get the format_name and storage_name settings which are plug-ins name and not necessary what is displayed on the combobox.
-  // note that we cannot take directly the combobox entry index as depending on the storage some format are not listed.
+  /**
+  * the format_name and storage_name settings which are plug-ins name and not necessary what is displayed on the combobox.
+  * note that we cannot take directly the combobox entry index as depending on the storage some format are not listed.
+  */
   const char *format_name = dt_conf_get_string_const(CONFIG_PREFIX "format_name");
   const char *storage_name = dt_conf_get_string_const(CONFIG_PREFIX "storage_name");
   const int format_index = dt_imageio_get_index_of_format(dt_imageio_get_format_by_name(format_name));
@@ -290,53 +341,54 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
     return;
   }
 
-  char *confirm_message = NULL;
-  dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage();
-  if(mstorage->ask_user_confirmation)
-    confirm_message = mstorage->ask_user_confirmation(mstorage);
-  if(confirm_message)
+  dt_imageio_module_storage_t *module_storage = dt_imageio_get_storage_by_index(storage_index);
+  g_assert(module_storage);
+  // get shared storage param struct (global sequence counter, one picasa connection etc)
+  dt_imageio_module_data_t *sdata = module_storage->get_params(module_storage);
+  if(sdata == NULL)
   {
-    const GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
-    GtkWidget *dialog = gtk_message_dialog_new(
-        GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-        "%s", confirm_message);
-#ifdef GDK_WINDOWING_QUARTZ
-    dt_osx_disallow_fullscreen(dialog);
-#endif
-
-    gtk_window_set_title(GTK_WINDOW(dialog), _("export to disk"));
-    const gint res = gtk_dialog_run(GTK_DIALOG(dialog));
-    gtk_widget_destroy(dialog);
-    g_free(confirm_message);
-    confirm_message = NULL;
-
-    if(res != GTK_RESPONSE_YES)
-    {
-      return;
-    }
+    dt_control_log(_("failed to get parameters from storage module `%s', aborting export.."),
+                   module_storage->name(module_storage));
+    return;
   }
 
-  // Let's get the max dimension restriction if any...
-  uint32_t max_width = dt_conf_get_int(CONFIG_PREFIX "width");
-  uint32_t max_height = dt_conf_get_int(CONFIG_PREFIX "height");
+  dt_control_export_t data = { .imgid_list = dt_act_on_get_images(TRUE, TRUE, TRUE),
+                               .max_width = dt_conf_get_int(CONFIG_PREFIX "width"),
+                               .max_height = dt_conf_get_int(CONFIG_PREFIX "height"),
+                               .format_index = format_index,
+                               .storage_index = storage_index,
+                               .high_quality = TRUE,
+                               .export_masks = dt_conf_get_bool(CONFIG_PREFIX "export_masks"),
+                               .style = _conf_get_style(),
+                               .style_append = dt_conf_get_bool(CONFIG_PREFIX "style_append"),
+                               .icc_type = sanitize_colorspaces(dt_conf_get_int(CONFIG_PREFIX "icctype")),
+                               .icc_filename = dt_conf_get_string(CONFIG_PREFIX "iccprofile"),
+                               .icc_intent = dt_conf_get_int(CONFIG_PREFIX "iccintent"),
+                               .metadata_export = d->metadata_export,
 
-  const gboolean export_masks = dt_conf_get_bool(CONFIG_PREFIX "export_masks");
-  const gboolean style_append = dt_conf_get_bool(CONFIG_PREFIX "style_append");
-  const char *tmp = dt_conf_get_string_const(CONFIG_PREFIX "style");
-  if(tmp)
+                               .module_format = dt_imageio_get_format_by_index(format_index),
+                               .module_storage = dt_imageio_get_storage_by_index(storage_index),
+                               .module_data = data.module_storage->get_params(data.module_storage)
+                             };
+  // get shared storage param struct (global sequence counter, one picasa connection etc)
+  
+  if(data.total > 0)
+    dt_control_log(ngettext("exporting %d image..", "exporting %d images..", data.total), data.total);
+  else
+    dt_control_log(_("no image to export"));
+
+
+  if(data.module_data == NULL)
   {
-    g_strlcpy(style, tmp, sizeof(style));
+    dt_control_log(_("failed to get parameters from storage module `%s', aborting export.."),
+                   data.module_storage->name(data.module_storage));
+    return;
   }
 
-  const dt_colorspaces_color_profile_type_t icc_type = sanitize_colorspaces(dt_conf_get_int(CONFIG_PREFIX "icctype"));
-  gchar *icc_filename = dt_conf_get_string(CONFIG_PREFIX "iccprofile");
-  const dt_iop_color_intent_t icc_intent = dt_conf_get_int(CONFIG_PREFIX "iccintent");
+  dt_control_export(data);
 
-  GList *list = dt_act_on_get_images(TRUE, TRUE, TRUE);
-  dt_control_export(list, max_width, max_height, format_index, storage_index, TRUE, export_masks,
-                    style, style_append, icc_type, icc_filename, icc_intent, d->metadata_export);
-
-  g_free(icc_filename);
+  // tell the storage that we got its params for an export so it can reset itself to a safe state
+  data.module_storage->export_dispatched(data.module_storage);
 
   _scale_optim();
   gtk_entry_set_text(GTK_ENTRY(d->scale), dt_conf_get_string_const(CONFIG_PREFIX "resizing_factor"));
