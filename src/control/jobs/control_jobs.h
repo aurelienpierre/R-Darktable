@@ -47,6 +47,36 @@ typedef struct dt_control_import_t
 } dt_control_import_t;
 
 
+typedef struct dt_control_export_t
+{
+  GList *imgid_list;
+  int max_width;
+  int max_height;
+  int format_index;
+  int storage_index;
+  int total;
+
+  gboolean high_quality;
+  gboolean export_masks;
+  gchar *style;
+  gboolean style_append;
+  dt_colorspaces_color_profile_type_t icc_type;
+  gchar *icc_filename;
+  dt_iop_color_intent_t icc_intent;
+
+  gchar *metadata_export;
+
+  dt_imageio_module_format_t *module_format;
+  dt_imageio_module_storage_t *module_storage;
+
+  /** 
+  * Needed since the gui thread resets things like overwrite once the export
+  * is dispatched, but we have to keep that information.
+  */
+  dt_imageio_module_data_t *module_data;
+
+} dt_control_export_t;
+
 void dt_control_gpx_apply(const gchar *filename, int32_t filmid, const gchar *tz, GList *imgs);
 
 void dt_control_datetime(const GTimeSpan offset, const char *datetime, GList *imgs);
@@ -62,11 +92,7 @@ void dt_control_move_images();
 void dt_control_copy_images();
 void dt_control_set_local_copy_images();
 void dt_control_reset_local_copy_images();
-void dt_control_export(GList *imgid_list, int max_width, int max_height, int format_index, int storage_index,
-                       gboolean high_quality, gboolean export_masks,
-                       char *style, gboolean style_append,
-                       dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
-                       dt_iop_color_intent_t icc_intent, const gchar *metadata_export);
+void dt_control_export(dt_control_export_t data);
 void dt_control_merge_hdr();
 
 /**
