@@ -22,7 +22,7 @@
 kernel void
 negadoctor (read_only image2d_t in, write_only image2d_t out, int width, int height,
             const float4 Dmin, const float4 wb_high, const float4 offset,
-            const float exposure, const float black, const float gamma, const float soft_clip, const float soft_clip_comp)
+            const float exposure, const float black, const float gamma, const float soft_clip, const float soft_clip_comp, const int slide_film)
 {
   const unsigned int x = get_global_id(0);
   const unsigned int y = get_global_id(1);
@@ -38,9 +38,11 @@ negadoctor (read_only image2d_t in, write_only image2d_t out, int width, int hei
   // Correct density in log space
   o = wb_high * o + offset;
 
-  // Print density on paper : ((1 - 10^corrected_de + black) * exposure)^gamma rewritten for FMA
-  o = -((float4)exposure * native_exp10(o) + (float4)black);
-  o = native_powr(fmax(o, (float4)0.0f), gamma); // note : this is always > 0
+  // Print density on paper (negative film) : ((1 - 10^corrected_de + black) * exposure)^gamma rewritten for FMA
+  o = native_exp10(o);
+  o = (slide_film) ? ((float4)exposure * o + (float4)black)
+                   : -((float4)exposure * o + (float4)black);
+  o = native_powr(fmax(o, (float4)0.0f), gamma); // note : this is always > 0
 
   // Compress highlights and clip negatives. from https://lists.gnu.org/archive/html/openexr-devel/2005-03/msg00009.html
   o = (o > (float4)soft_clip) ? soft_clip + ((float4)1.0f - native_exp(-(o - (float4)soft_clip) / (float4)soft_clip_comp)) * (float4)soft_clip_comp
