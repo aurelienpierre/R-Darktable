@@ -12,7 +12,7 @@ PROGN=Ansel
 
 # Go to directory of script
 scriptDir=$(dirname "$0")
-buildDir="${scriptDir}/../../build/macosx"
+buildDir="${scriptDir}/../../install"
 cd "$buildDir"/
 
 # Generate symlink to applications folder for easier drag & drop within dmg
